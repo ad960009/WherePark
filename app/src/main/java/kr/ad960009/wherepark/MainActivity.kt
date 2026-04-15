@@ -8,12 +8,14 @@ import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
 import android.content.Context
 import android.content.pm.PackageManager
-import android.os.Build
 import android.os.Bundle
+import android.widget.EditText
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.recyclerview.widget.LinearLayoutManager
 import kr.ad960009.wherepark.databinding.ActivityMainBinding
 
 class MainActivity : AppCompatActivity() {
@@ -22,7 +24,9 @@ class MainActivity : AppCompatActivity() {
     private var bluetoothAdapter: BluetoothAdapter? = null
     private var isScanning = false
 
-    private lateinit var deviceAdapter: DeviceAdapter
+    // 어댑터 분리: 상단(스캔용)과 하단(등록 관리용)
+    private lateinit var scanAdapter: DeviceAdapter
+    private lateinit var registeredAdapter: RegisteredDeviceAdapter
 
     // 1. 권한 요청 핸들러 (안드로이드 최신 방식)
     private val requestPermissionLauncher = registerForActivityResult(
@@ -30,7 +34,9 @@ class MainActivity : AppCompatActivity() {
     ) { permissions ->
         val allGranted = permissions.entries.all { it.value }
         if (allGranted) {
-            startBleScan() // 권한 허용 시 스캔 시작
+            // 권한이 승인되었을 때, 굳이 바로 스캔을 시작하지 않고
+            // 사용자가 다시 버튼을 누르도록 안내하는 것이 논리적으로 꼬이지 않습니다.
+            Toast.makeText(this, "권한이 승인되었습니다. 다시 시도해주세요.", Toast.LENGTH_SHORT).show()
         } else {
             Toast.makeText(this, "필수 권한이 거부되었습니다.", Toast.LENGTH_SHORT).show()
         }
@@ -45,47 +51,66 @@ class MainActivity : AppCompatActivity() {
         val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
         bluetoothAdapter = bluetoothManager.adapter
 
-        // 스캔 버튼 클릭 리스너
-        binding.btnStartScan.setOnClickListener {
+        // 뷰 셋업 및 저장된 데이터 불러오기
+        setupRecyclerViews()
+        loadRegisteredDevices()
+        loadMyCarData()
+
+        // 스캔 버튼 클릭 리스너 (XML의 버튼 ID에 맞춰 btnScan 또는 btnStartScan 사용)
+        binding.btnScan.setOnClickListener {
             checkPermissionsAndScan()
         }
 
-        deviceAdapter = DeviceAdapter { device ->
-            // 장치를 클릭했을 때 실행될 코드 (나중에 다이얼로그 띄울 곳)
-            Toast.makeText(this, "${device.name}을 선택했습니다.", Toast.LENGTH_SHORT).show()
-            showRegisterDialog(device)
-        }
-
-        binding.rvDevices.apply {
-            adapter = deviceAdapter
-            layoutManager = androidx.recyclerview.widget.LinearLayoutManager(this@MainActivity)
+        binding.btnRegisterCar.setOnClickListener {
+            checkPermissionsAndSelectCar()
         }
     }
 
-    // 2. 권한 체크 로직
+    // =========================================================================
+    // 2. 권한 체크 및 블루투스 스캔 로직
+    // =========================================================================
+
     private fun checkPermissionsAndScan() {
-        // 필요한 권한들 리스트 (안드로이드 12 이상 기준)
         val requiredPermissions = arrayOf(
             Manifest.permission.BLUETOOTH_SCAN,
             Manifest.permission.BLUETOOTH_CONNECT,
             Manifest.permission.ACCESS_FINE_LOCATION
         )
 
-        // 모든 권한이 이미 허용되었는지 확인
         val isAlreadyGranted = requiredPermissions.all {
             ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
         }
 
         if (isAlreadyGranted) {
-            // 이미 권한이 있다면 바로 스캔 시작
             startBleScan()
         } else {
-            // 권한이 없다면 사용자에게 요청 팝업 띄우기
             requestPermissionLauncher.launch(requiredPermissions)
         }
     }
 
-    // 3. 실제 BLE 스캔 로직
+    private fun checkPermissionsAndSelectCar() {
+        val requiredPermissions = arrayOf(
+            Manifest.permission.BLUETOOTH_SCAN,
+            Manifest.permission.BLUETOOTH_CONNECT,
+            Manifest.permission.ACCESS_FINE_LOCATION
+        )
+
+        val isAlreadyGranted = requiredPermissions.all {
+            ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
+        }
+
+        if (isAlreadyGranted) {
+            // 권한이 이미 있으면 바로 기기 목록 띄우기
+            showPairedDevicesDialog()
+        } else {
+            // 권한이 없으면 요청 (기존에 만들어둔 Launcher 활용)
+            // 요청 결과에서 자동으로 스캔이 시작되지 않도록 플래그를 두거나,
+            // 그냥 다시 버튼을 누르게 유도하는 것이 깔끔합니다.
+            requestPermissionLauncher.launch(requiredPermissions)
+            Toast.makeText(this, "권한 허용 후 다시 버튼을 눌러주세요.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     @SuppressLint("MissingPermission")
     private fun startBleScan() {
         val scanner = bluetoothAdapter?.bluetoothLeScanner
@@ -96,12 +121,11 @@ class MainActivity : AppCompatActivity() {
 
         if (!isScanning) {
             isScanning = true
-            binding.btnStartScan.text = "스캔 중지..."
+            binding.btnScan.text = "스캔 중지..."
 
-            // 스캔 결과 콜백
             scanner.startScan(scanCallback)
 
-            // 배터리 보호를 위해 10초 후 자동 중지
+            // 10초 후 자동 중지 (배터리 보호)
             binding.root.postDelayed({
                 stopBleScan()
             }, 10000)
@@ -116,51 +140,214 @@ class MainActivity : AppCompatActivity() {
             val scanner = bluetoothAdapter?.bluetoothLeScanner
             scanner?.stopScan(scanCallback)
             isScanning = false
-            binding.btnStartScan.text = "주변 비컨 스캔 시작"
+            binding.btnScan.text = "스캔 시작"
         }
     }
 
-    // 4. 스캔 결과 처리
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
-            val deviceName = result.device.name ?: "이름 없음"
+            // 기본값 설정
+            var deviceName = "Unknown Device"
             val deviceAddress = result.device.address
-            var rssi = result.rssi
+            val rssi = result.rssi
 
-            // 로그로 먼저 확인해보기
-            println("찾은 장치: $deviceName [$deviceAddress]")
+            try {
+                // 안드로이드 12 이상에서 권한이 없으면 여기서 SecurityException이 발생합니다.
+                deviceName = result.device.name ?: "Unknown Device"
+            } catch (e: SecurityException) {
+                // 예외 발생 시 토스트를 띄우고 기본값을 유지합니다.
+                // runOnUiThread를 써야 하는 이유는 스캔 콜백이 백그라운드 스레드에서 돌기 때문입니다.
+                runOnUiThread {
+                    Toast.makeText(this@MainActivity, "기기 이름을 가져올 권한이 없습니다.", Toast.LENGTH_SHORT).show()
+                }
+            }
 
-            // TODO: 여기서 리스트(RecyclerView)에 데이터를 추가하는 코드가 들어갑니다.
             runOnUiThread {
-                deviceAdapter.addDevice(BeaconDevice(deviceName, deviceAddress, rssi))
+                // 상단 스캔 리스트 업데이트
+                scanAdapter.addDevice(BeaconDevice(deviceName, deviceAddress, rssi))
+
+                // 하단 등록 리스트 RSSI 업데이트
+                registeredAdapter.updateRssi(deviceAddress, rssi)
             }
         }
     }
 
-    private fun showRegisterDialog(device: BeaconDevice) {
-        val builder = android.app.AlertDialog.Builder(this)
-        builder.setTitle("주차 장치 등록")
-        builder.setMessage("${device.address} 장치에 이름을 붙여주세요.")
+    // =========================================================================
+    // 3. UI 및 데이터 관리 (RecyclerView & Dialog)
+    // =========================================================================
 
-        // 입력창 추가
-        val input = android.widget.EditText(this)
-        input.hint = "예: 내 차 옆 기둥 / 지하 2층"
-        builder.setView(input)
-
-        builder.setPositiveButton("등록") { _, _ ->
-            val alias = input.text.toString()
-            if (alias.isNotEmpty()) {
-                // SharedPreferences에 저장 (Key: 맥주소, Value: 별명)
-                saveDeviceData(device.address, alias)
-                Toast.makeText(this, "[$alias] 등록되었습니다!", Toast.LENGTH_SHORT).show()
-            }
+    private fun setupRecyclerViews() {
+        // [상단] 스캔 리스트 설정
+        scanAdapter = DeviceAdapter { device ->
+            showRegisterDialog(device)
         }
-        builder.setNegativeButton("취소", null)
-        builder.show()
+        binding.rvDevices.apply {
+            adapter = scanAdapter
+            layoutManager = LinearLayoutManager(this@MainActivity)
+        }
+
+        // [하단] 등록 리스트 설정
+        registeredAdapter = RegisteredDeviceAdapter(
+            onEdit = { device -> showEditDialog(device) },
+            onDelete = { device -> showDeleteDialog(device) }
+        )
+        binding.rvRegisteredDevices.apply {
+            adapter = registeredAdapter
+            layoutManager = LinearLayoutManager(this@MainActivity)
+        }
+    }
+
+    private fun loadRegisteredDevices() {
+        val prefs = getSharedPreferences("WhereParkPrefs", MODE_PRIVATE)
+        val allEntries = prefs.all
+
+        val registeredList = mutableListOf<BeaconDevice>()
+        for ((address, alias) in allEntries) {
+            registeredList.add(BeaconDevice(alias.toString(), address, 0))
+        }
+
+        registeredAdapter.setItems(registeredList)
     }
 
     private fun saveDeviceData(address: String, alias: String) {
         val prefs = getSharedPreferences("WhereParkPrefs", MODE_PRIVATE)
         prefs.edit().putString(address, alias).apply()
+    }
+
+    // 신규 등록 다이얼로그
+    private fun showRegisterDialog(device: BeaconDevice) {
+        val input = EditText(this).apply { hint = "예: 내 차 옆 기둥 / 지하 2층" }
+        AlertDialog.Builder(this)
+            .setTitle("주차 장치 등록")
+            .setMessage("${device.address} 장치에 이름을 붙여주세요.")
+            .setView(input)
+            .setPositiveButton("등록") { _, _ ->
+                val alias = input.text.toString()
+                if (alias.isNotEmpty()) {
+                    saveDeviceData(device.address, alias)
+                    loadRegisteredDevices() // 등록 즉시 하단 리스트 새로고침
+                    Toast.makeText(this, "[$alias] 등록되었습니다!", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("취소", null)
+            .show()
+    }
+
+    // 이름 수정 다이얼로그
+    private fun showEditDialog(device: BeaconDevice) {
+        val input = EditText(this).apply { setText(device.name) }
+        AlertDialog.Builder(this)
+            .setTitle("이름 수정")
+            .setView(input)
+            .setPositiveButton("수정") { _, _ ->
+                val newName = input.text.toString()
+                if (newName.isNotEmpty()) {
+                    saveDeviceData(device.address, newName)
+                    loadRegisteredDevices()
+                }
+            }
+            .setNegativeButton("취소", null)
+            .show()
+    }
+
+    // 삭제 확인 다이얼로그
+    private fun showDeleteDialog(device: BeaconDevice) {
+        AlertDialog.Builder(this)
+            .setTitle("장치 삭제")
+            .setMessage("[${device.name}]을(를) 삭제하시겠습니까?")
+            .setPositiveButton("삭제") { _, _ ->
+                val prefs = getSharedPreferences("WhereParkPrefs", MODE_PRIVATE)
+                prefs.edit().remove(device.address).apply()
+                loadRegisteredDevices()
+                Toast.makeText(this, "삭제되었습니다.", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("취소", null)
+            .show()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        displayLastParkingLocation()
+    }
+
+    private fun updateParkingInfoUI() {
+        val prefs = getSharedPreferences("WhereParkPrefs", MODE_PRIVATE)
+        val location = prefs.getString("LAST_PARKING_LOCATION", "기록 없음")
+        val timeMillis = prefs.getLong("LAST_PARKING_TIME", 0L)
+
+        binding.tvLastParkingLocation.text = location
+
+        if (timeMillis != 0L) {
+            val sdf = java.text.SimpleDateFormat("MM/dd HH:mm", java.util.Locale.getDefault())
+            binding.tvLastParkingTime.text = "확인 시간: ${sdf.format(java.util.Date(timeMillis))}"
+        }
+    }
+
+    private fun displayLastParkingLocation() {
+        val prefs = getSharedPreferences("WhereParkPrefs", MODE_PRIVATE)
+        val lastLoc = prefs.getString("LAST_PARKING_LOCATION", "정보 없음")
+        val lastTime = prefs.getLong("LAST_PARKING_TIME", 0)
+
+        if (lastTime != 0L) {
+            //val sdf = java.text.SimpleDateFormat("MM/dd HH:mm", java.util.Locale.getDefault())
+            //val timeStr = sdf.format(java.util.Date(lastTime))
+
+            // 상단에 위치 표시용 텍스트뷰가 있다면 거기에 뿌려줍니다.
+            // binding.tvLastStatus.text = "최종 주차 위치: $lastLoc ($timeStr)"
+            Toast.makeText(this, "마지막 확인 위치: $lastLoc", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    // =========================================================================
+    // 4. 내 차량(페어링된 기기) 등록 및 관리
+    // =========================================================================
+
+    @SuppressLint("MissingPermission")
+    private fun showPairedDevicesDialog() {
+        // 스마트폰에 이미 페어링된 기기 목록 가져오기
+        val pairedDevices = bluetoothAdapter?.bondedDevices
+
+        if (pairedDevices.isNullOrEmpty()) {
+            Toast.makeText(this, "페어링된 블루투스 장치가 없습니다.\n설정에서 차를 먼저 연결해주세요.", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        // 리스트와 화면에 띄울 이름 배열 만들기
+        val deviceList = pairedDevices.toList()
+        val deviceNames = deviceList.map { "${it.name}\n(${it.address})" }.toTypedArray()
+
+        AlertDialog.Builder(this)
+            .setTitle("내 차의 블루투스 선택")
+            .setItems(deviceNames) { _, which ->
+                val selectedDevice = deviceList[which]
+                saveMyCarDevice(selectedDevice.name ?: "Unknown Car", selectedDevice.address)
+            }
+            .setNegativeButton("취소", null)
+            .show()
+    }
+
+    private fun saveMyCarDevice(name: String, address: String) {
+        val prefs = getSharedPreferences("WhereParkPrefs", MODE_PRIVATE)
+        prefs.edit().apply {
+            putString("MY_CAR_NAME", name)
+            putString("MY_CAR_ADDRESS", address)
+            apply()
+        }
+        updateMyCarUI(name)
+        Toast.makeText(this, "내 차[$name]가 등록되었습니다.", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun loadMyCarData() {
+        val prefs = getSharedPreferences("WhereParkPrefs", MODE_PRIVATE)
+        val carName = prefs.getString("MY_CAR_NAME", null)
+        if (carName != null) {
+            updateMyCarUI(carName)
+        }
+    }
+
+    private fun updateMyCarUI(carName: String) {
+        // 상단 UI 업데이트 (텍스트와 색상 변경)
+        binding.tvMyCarStatus.text = "현재 등록된 차량: $carName"
+        binding.tvMyCarStatus.setTextColor(android.graphics.Color.parseColor("#00FFFF")) // Cyan 색상으로 눈에 띄게
     }
 }

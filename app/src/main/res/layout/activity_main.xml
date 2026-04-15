@@ -1,52 +1,141 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:padding="16dp"
-    tools:context=".MainActivity">
+    android:background="#121212"
+    android:fitsSystemWindows="true">
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="주차 위치 자동 기록"
-        android:textSize="20sp"
-        android:textStyle="bold"
-        android:layout_marginBottom="16dp"/>
-
-    <Button
-        android:id="@+id/btnStartScan"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="주변 비컨 스캔 시작"
-        android:backgroundTint="#2196F3"
-        android:textColor="#FFFFFF" />
+        android:orientation="horizontal"
+        android:padding="16dp"
+        android:background="#1E1E1E"
+        android:gravity="center_vertical">
 
-    <TextView
-        android:layout_width="wrap_content"
+        <TextView
+            android:id="@+id/tvMyCarStatus"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="차량 등록 필요 (버튼을 눌러 선택)"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp" />
+
+        <Button
+            android:id="@+id/btnRegisterCar"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="내 차 설정"
+            android:textColor="#007AFF"
+            style="@style/Widget.MaterialComponents.Button.TextButton" />
+    </LinearLayout>
+
+    <androidx.cardview.widget.CardView
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="검색된 장치 (클릭하여 층수 등록)"
-        android:layout_marginTop="24dp"
-        android:layout_marginBottom="8dp"
-        android:textColor="#666666" />
+        android:layout_margin="12dp"
+        app:cardBackgroundColor="#2A2A2A"
+        app:cardCornerRadius="12dp"
+        app:cardElevation="8dp">
 
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/rvDevices"
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="20dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="마지막 확인된 주차 위치"
+                android:textColor="#AAAAAA"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/tvLastParkingLocation"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="기록 없음"
+                android:textColor="#00FF00"
+                android:textSize="28sp"
+                android:textStyle="bold"
+                android:layout_marginTop="6dp" />
+
+            <TextView
+                android:id="@+id/tvLastParkingTime"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="스캔 데이터가 없습니다."
+                android:textColor="#888888"
+                android:textSize="12sp"
+                android:layout_marginTop="4dp" />
+        </LinearLayout>
+    </androidx.cardview.widget.CardView>
+
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:divider="#DDDDDD"
-        android:dividerHeight="1dp" />
+        android:orientation="vertical"
+        android:padding="8dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="주변 장치 스캔"
+            android:textColor="#00FF00"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="8dp"
+            android:layout_marginStart="4dp"/>
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvDevices"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+    </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginHorizontal="12dp"
+        android:background="#333333" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:padding="8dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="등록된 주차 장치"
+            android:textColor="#FFBB00"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="8dp"
+            android:layout_marginStart="4dp"/>
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvRegisteredDevices"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+    </LinearLayout>
 
     <Button
-        android:id="@+id/btnStartService"
+        android:id="@+id/btnScan"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:text="자동 추적 서비스 시작"
-        android:backgroundTint="#4CAF50"
+        android:layout_height="56dp"
+        android:layout_margin="16dp"
+        android:backgroundTint="#007AFF"
+        android:text="스캔 시작"
+        android:textSize="16sp"
+        android:textStyle="bold"
         android:textColor="#FFFFFF" />
 
 </LinearLayout>
