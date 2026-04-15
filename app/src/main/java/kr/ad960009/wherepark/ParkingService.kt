@@ -13,7 +13,6 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
@@ -47,7 +46,7 @@ class ParkingService : Service() {
     private val bluetoothReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == BluetoothDevice.ACTION_ACL_DISCONNECTED) {
-                val device = intent?.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+                val device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
                 val prefs = getSharedPreferences("WhereParkPrefs", MODE_PRIVATE)
                 val myCarAddress = prefs.getString("MY_CAR_ADDRESS", null)
 
@@ -138,6 +137,7 @@ class ParkingService : Service() {
 
             // 알림창에도 가장 확실한 현재 위치를 갱신
             updateNotification("주차 위치 탐색 중... 현재 최적: $alias")
+            println("주차 위치 저장: $alias (MAC: $address, RSSI: $rssi)")
         }
 
         updateWidget()
