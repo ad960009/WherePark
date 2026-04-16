@@ -31,8 +31,8 @@ class ParkingService : Service() {
     private val stopScanRunnable = Runnable {
         stopBleScan()
 
-        val finalLoc = getSharedPreferences("WhereParkPrefs", MODE_PRIVATE)
-            .getString("LAST_PARKING_LOCATION", "알 수 없음")
+        val finalLoc = getSharedPreferences(Constants.PREFS_NAME, MODE_PRIVATE)
+            .getString(Constants.KEY_LAST_PARKING_LOCATION, "알 수 없음")
 
         // 스캔이 종료될 때 최종 위치를 확정 알림으로 띄움
         updateNotification("주차 기록 완료: $finalLoc")
@@ -45,14 +45,26 @@ class ParkingService : Service() {
     // 1. 블루투스 연결 해제 감지 리시버
     private val bluetoothReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == BluetoothDevice.ACTION_ACL_DISCONNECTED) {
-                val device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
-                val prefs = getSharedPreferences("WhereParkPrefs", MODE_PRIVATE)
-                val myCarAddress = prefs.getString("MY_CAR_ADDRESS", null)
+            val action = intent?.action
+            val device = intent?.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
 
-                // 등록된 내 차와 연결이 끊긴 경우에만 스캔 시작
-                if (device?.address == myCarAddress && myCarAddress != null) {
-                    startParkingScan()
+            val prefs = getSharedPreferences(Constants.PREFS_NAME, MODE_PRIVATE)
+            val myCarAddress = prefs.getString(Constants.KEY_MY_CAR_ADDRESS, null)
+
+            // 내 차 주소와 일치하는지 확인
+            if (device?.address == myCarAddress && myCarAddress != null) {
+                when (action) {
+                    BluetoothDevice.ACTION_ACL_CONNECTED -> {
+                        // 주행 중 상태로 위젯 갱신
+                        updateWidgetWithStatus("주행 중 🚗")
+                        // 주행 중에는 스캔 중단 (안전을 위해)
+                        stopBleScan()
+                        handler.removeCallbacks(stopScanRunnable)
+                    }
+                    BluetoothDevice.ACTION_ACL_DISCONNECTED -> {
+                        // 연결 해제 시 스캔 시작
+                        startParkingScan()
+                    }
                 }
             }
         }
@@ -64,11 +76,11 @@ class ParkingService : Service() {
             val address = result.device.address
             val rssi = result.rssi
 
-            val prefs = getSharedPreferences("WhereParkPrefs", MODE_PRIVATE)
+            val prefs = getSharedPreferences(Constants.PREFS_NAME, MODE_PRIVATE)
             val alias = prefs.getString(address, null)
 
             // 등록된 비컨이 기준치(-85dBm)보다 강하게 감지되면 위치 저장
-            if (alias != null && rssi > -85) {
+            if (alias != null && rssi > Constants.MIN_RSSI_THRESHOLD) {
                 saveParkingLocation(alias, address, rssi)
             }
         }
@@ -80,7 +92,10 @@ class ParkingService : Service() {
         bluetoothAdapter = bluetoothManager.adapter
 
         // 리시버 등록
-        val filter = IntentFilter(BluetoothDevice.ACTION_ACL_DISCONNECTED)
+        val filter = IntentFilter().apply {
+            addAction(BluetoothDevice.ACTION_ACL_CONNECTED)    // 연결됨 추가
+            addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED) // 연결 해제됨
+        }
         registerReceiver(bluetoothReceiver, filter)
     }
 
@@ -88,14 +103,14 @@ class ParkingService : Service() {
         createNotificationChannel()
 
         // 포그라운드 알림 생성
-        val notification = NotificationCompat.Builder(this, "PARKING_CHANNEL")
+        val notification = NotificationCompat.Builder(this, Constants.CHANNEL_ID)
             .setContentTitle("어디파킹 활성화")
             .setContentText("연결 해제 시 주차 위치를 기록합니다.")
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
 
-        startForeground(1, notification)
+        startForeground(Constants.NOTIFICATION_ID, notification)
         return START_STICKY
     }
 
@@ -110,7 +125,7 @@ class ParkingService : Service() {
 
         // 5분 후 스캔 중단 예약
         handler.removeCallbacks(stopScanRunnable)
-        handler.postDelayed(stopScanRunnable, 5 * 60 * 1000)
+        handler.postDelayed(stopScanRunnable, Constants.PARKING_SCAN_DURATION_MS)
     }
 
     @SuppressLint("MissingPermission")
@@ -122,7 +137,7 @@ class ParkingService : Service() {
     }
 
     private fun saveParkingLocation(alias: String, address: String, rssi: Int) {
-        val prefs = getSharedPreferences("WhereParkPrefs", MODE_PRIVATE)
+        val prefs = getSharedPreferences(Constants.PREFS_NAME, MODE_PRIVATE)
 
         // 💡 단순히 마지막 것이 아니라, 5분 스캔 동안 "가장 가까웠던(강했던)" 장치를 기록
         if (rssi > bestRssi) {
@@ -130,8 +145,8 @@ class ParkingService : Service() {
             bestLocation = alias
 
             prefs.edit().apply {
-                putString("LAST_PARKING_LOCATION", alias)
-                putLong("LAST_PARKING_TIME", System.currentTimeMillis())
+                putString(Constants.KEY_LAST_PARKING_LOCATION, alias)
+                putLong(Constants.KEY_LAST_PARKING_TIME, System.currentTimeMillis())
                 apply()
             }
 
@@ -156,7 +171,7 @@ class ParkingService : Service() {
     }
 
     private fun updateNotification(content: String) {
-        val notification = NotificationCompat.Builder(this, "PARKING_CHANNEL")
+        val notification = NotificationCompat.Builder(this, Constants.CHANNEL_ID)
             .setContentTitle("어디파킹 알림")
             .setContentText(content)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
@@ -164,17 +179,32 @@ class ParkingService : Service() {
             .build()
 
         val manager = getSystemService(NotificationManager::class.java)
-        manager.notify(1, notification)
+        manager.notify(Constants.NOTIFICATION_ID, notification)
     }
 
     private fun createNotificationChannel() {
         val channel = NotificationChannel(
-            "PARKING_CHANNEL",
-            "주차 서비스 기록",
+            Constants.CHANNEL_ID,
+            Constants.CHANNEL_NAME,
             NotificationManager.IMPORTANCE_LOW
         )
         val manager = getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(channel)
+    }
+
+    private fun updateWidgetWithStatus(status: String) {
+        val prefs = getSharedPreferences(Constants.PREFS_NAME, MODE_PRIVATE)
+        // 위젯에서 읽어갈 수 있도록 임시 저장하거나 Intent에 담아 보냅니다.
+        // 여기서는 가장 확실하게 Prefs에 저장하고 위젯을 갱신시키겠습니다.
+        prefs.edit().putString(Constants.KEY_LAST_PARKING_LOCATION, status).apply()
+
+        val intent = Intent(this, ParkingWidgetProvider::class.java)
+        intent.action = AppWidgetManager.ACTION_APPWIDGET_UPDATE
+        val ids = AppWidgetManager.getInstance(application).getAppWidgetIds(
+            ComponentName(application, ParkingWidgetProvider::class.java)
+        )
+        intent.putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, ids)
+        sendBroadcast(intent)
     }
 
     override fun onDestroy() {

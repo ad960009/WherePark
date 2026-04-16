@@ -7,6 +7,7 @@ import android.bluetooth.BluetoothManager
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.widget.EditText
@@ -64,6 +65,8 @@ class MainActivity : AppCompatActivity() {
         binding.btnRegisterCar.setOnClickListener {
             checkPermissionsAndSelectCar()
         }
+
+        startBackgroundService()
     }
 
     // =========================================================================
@@ -128,7 +131,7 @@ class MainActivity : AppCompatActivity() {
             // 10초 후 자동 중지 (배터리 보호)
             binding.root.postDelayed({
                 stopBleScan()
-            }, 10000)
+            }, Constants.SCAN_DURATION_MS)
         } else {
             stopBleScan()
         }
@@ -198,19 +201,30 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun loadRegisteredDevices() {
-        val prefs = getSharedPreferences("WhereParkPrefs", MODE_PRIVATE)
+        val prefs = getSharedPreferences(Constants.PREFS_NAME, MODE_PRIVATE)
         val allEntries = prefs.all
 
         val registeredList = mutableListOf<BeaconDevice>()
-        for ((address, alias) in allEntries) {
-            registeredList.add(BeaconDevice(alias.toString(), address, 0))
+        // 💡 설정에 사용된 키워드들을 리스트로 정의
+        val excludeKeys = listOf(
+            Constants.KEY_MY_CAR_NAME,
+            Constants.KEY_MY_CAR_ADDRESS,
+            Constants.KEY_LAST_PARKING_LOCATION,
+            Constants.KEY_LAST_PARKING_TIME
+        )
+
+        for ((key, value) in allEntries) {
+            // 예약된 키워드가 아닐 때만 기기 목록으로 판단하고 추가
+            if (key !in excludeKeys) {
+                registeredList.add(BeaconDevice(value.toString(), key, 0))
+            }
         }
 
         registeredAdapter.setItems(registeredList)
     }
 
     private fun saveDeviceData(address: String, alias: String) {
-        val prefs = getSharedPreferences("WhereParkPrefs", MODE_PRIVATE)
+        val prefs = getSharedPreferences(Constants.PREFS_NAME, MODE_PRIVATE)
         prefs.edit().putString(address, alias).apply()
     }
 
@@ -256,7 +270,7 @@ class MainActivity : AppCompatActivity() {
             .setTitle("장치 삭제")
             .setMessage("[${device.name}]을(를) 삭제하시겠습니까?")
             .setPositiveButton("삭제") { _, _ ->
-                val prefs = getSharedPreferences("WhereParkPrefs", MODE_PRIVATE)
+                val prefs = getSharedPreferences(Constants.PREFS_NAME, MODE_PRIVATE)
                 prefs.edit().remove(device.address).apply()
                 loadRegisteredDevices()
                 Toast.makeText(this, "삭제되었습니다.", Toast.LENGTH_SHORT).show()
@@ -267,13 +281,13 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        displayLastParkingLocation()
+        updateParkingInfoUI()
     }
 
     private fun updateParkingInfoUI() {
-        val prefs = getSharedPreferences("WhereParkPrefs", MODE_PRIVATE)
-        val location = prefs.getString("LAST_PARKING_LOCATION", "기록 없음")
-        val timeMillis = prefs.getLong("LAST_PARKING_TIME", 0L)
+        val prefs = getSharedPreferences(Constants.PREFS_NAME, MODE_PRIVATE)
+        val location = prefs.getString(Constants.KEY_LAST_PARKING_LOCATION, "기록 없음")
+        val timeMillis = prefs.getLong(Constants.KEY_LAST_PARKING_TIME, 0L)
 
         binding.tvLastParkingLocation.text = location
 
@@ -284,9 +298,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun displayLastParkingLocation() {
-        val prefs = getSharedPreferences("WhereParkPrefs", MODE_PRIVATE)
-        val lastLoc = prefs.getString("LAST_PARKING_LOCATION", "정보 없음")
-        val lastTime = prefs.getLong("LAST_PARKING_TIME", 0)
+        val prefs = getSharedPreferences(Constants.PREFS_NAME, MODE_PRIVATE)
+        val lastLoc = prefs.getString(Constants.KEY_LAST_PARKING_LOCATION, "정보 없음")
+        val lastTime = prefs.getLong(Constants.KEY_LAST_PARKING_TIME, 0)
 
         if (lastTime != 0L) {
             //val sdf = java.text.SimpleDateFormat("MM/dd HH:mm", java.util.Locale.getDefault())
@@ -327,19 +341,31 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun saveMyCarDevice(name: String, address: String) {
-        val prefs = getSharedPreferences("WhereParkPrefs", MODE_PRIVATE)
+        val prefs = getSharedPreferences(Constants.PREFS_NAME, MODE_PRIVATE)
         prefs.edit().apply {
-            putString("MY_CAR_NAME", name)
-            putString("MY_CAR_ADDRESS", address)
+            putString(Constants.KEY_MY_CAR_NAME, name)
+            putString(Constants.KEY_MY_CAR_ADDRESS, address)
             apply()
         }
         updateMyCarUI(name)
         Toast.makeText(this, "내 차[$name]가 등록되었습니다.", Toast.LENGTH_SHORT).show()
+        startBackgroundService()
+    }
+
+    private fun startBackgroundService() {
+        val prefs = getSharedPreferences(Constants.PREFS_NAME, MODE_PRIVATE)
+        val myCarAddress = prefs.getString(Constants.KEY_MY_CAR_ADDRESS, null)
+
+        // 내 차가 등록되어 있을 때만 서비스 가동
+        if (myCarAddress != null) {
+            val intent = Intent(this, ParkingService::class.java)
+            startForegroundService(intent)
+        }
     }
 
     private fun loadMyCarData() {
-        val prefs = getSharedPreferences("WhereParkPrefs", MODE_PRIVATE)
-        val carName = prefs.getString("MY_CAR_NAME", null)
+        val prefs = getSharedPreferences(Constants.PREFS_NAME, MODE_PRIVATE)
+        val carName = prefs.getString(Constants.KEY_MY_CAR_NAME, null)
         if (carName != null) {
             updateMyCarUI(carName)
         }
