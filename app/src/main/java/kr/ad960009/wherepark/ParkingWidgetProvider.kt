@@ -11,7 +11,7 @@ class ParkingWidgetProvider : AppWidgetProvider() {
     override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
         for (appWidgetId in appWidgetIds) {
             val prefs = context.getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
-            val location = prefs.getString(Constants.KEY_LAST_PARKING_LOCATION, "기록 없음")
+            val location = prefs.getString(Constants.KEY_LAST_PARKING_LOCATION, Constants.MSG_READY)
 
             val views = RemoteViews(context.packageName, R.layout.widget_parking)
             views.setTextViewText(R.id.widgetLocation, location)

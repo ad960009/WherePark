@@ -31,11 +31,18 @@ class ParkingService : Service() {
     private val stopScanRunnable = Runnable {
         stopBleScan()
 
-        val finalLoc = getSharedPreferences(Constants.PREFS_NAME, MODE_PRIVATE)
-            .getString(Constants.KEY_LAST_PARKING_LOCATION, "알 수 없음")
+        val prefs = getSharedPreferences(Constants.PREFS_NAME, MODE_PRIVATE)
+        var finalLoc = prefs.getString(Constants.KEY_LAST_PARKING_LOCATION, Constants.MSG_NOT_FOUND)
+
+        if (finalLoc == Constants.MSG_SCANNING) {
+            finalLoc = Constants.MSG_NOT_FOUND
+            // 실제 저장소도 업데이트해줘야 다음 앱 실행 시 "탐색 중"이 뜨지 않습니다.
+            prefs.edit().putString(Constants.KEY_LAST_PARKING_LOCATION, Constants.MSG_NOT_FOUND).apply()
+        }
 
         // 스캔이 종료될 때 최종 위치를 확정 알림으로 띄움
         updateNotification("주차 기록 완료: $finalLoc")
+        updateWidgetWithStatus(finalLoc ?: Constants.MSG_NOT_FOUND)
 
         // 초기화
         bestRssi = -100
@@ -56,7 +63,7 @@ class ParkingService : Service() {
                 when (action) {
                     BluetoothDevice.ACTION_ACL_CONNECTED -> {
                         // 주행 중 상태로 위젯 갱신
-                        updateWidgetWithStatus("주행 중 🚗")
+                        updateWidgetWithStatus(Constants.MSG_DRIVING)
                         // 주행 중에는 스캔 중단 (안전을 위해)
                         stopBleScan()
                         handler.removeCallbacks(stopScanRunnable)
@@ -64,6 +71,7 @@ class ParkingService : Service() {
                     BluetoothDevice.ACTION_ACL_DISCONNECTED -> {
                         // 연결 해제 시 스캔 시작
                         startParkingScan()
+                        updateWidgetWithStatus(Constants.MSG_SCANNING)
                     }
                 }
             }
@@ -119,6 +127,10 @@ class ParkingService : Service() {
         if (isScanning) return
 
         isScanning = true
+
+        bestRssi = -100
+        bestLocation = null
+
         updateNotification("차량 연결 해제: 5분간 주차 층수 탐색 중...")
 
         bluetoothAdapter?.bluetoothLeScanner?.startScan(scanCallback)

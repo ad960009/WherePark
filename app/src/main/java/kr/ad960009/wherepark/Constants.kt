@@ -19,4 +19,10 @@ object Constants {
     const val SCAN_DURATION_MS = 10000L // 메인 화면 10초
     const val PARKING_SCAN_DURATION_MS = 300000L // 서비스 5분 (5 * 60 * 1000)
     const val MIN_RSSI_THRESHOLD = -85
+
+    // 위젯 표시 메시지
+    const val MSG_SCANNING = "탐색 중 🎯"
+    const val MSG_NOT_FOUND = "알 수 없음"
+    const val MSG_DRIVING = "주행 중 🚗"
+    const val MSG_READY = "주차 감지중"
 }

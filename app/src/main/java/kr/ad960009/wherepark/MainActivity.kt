@@ -286,7 +286,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateParkingInfoUI() {
         val prefs = getSharedPreferences(Constants.PREFS_NAME, MODE_PRIVATE)
-        val location = prefs.getString(Constants.KEY_LAST_PARKING_LOCATION, "기록 없음")
+        val location = prefs.getString(Constants.KEY_LAST_PARKING_LOCATION, Constants.MSG_READY)
         val timeMillis = prefs.getLong(Constants.KEY_LAST_PARKING_TIME, 0L)
 
         binding.tvLastParkingLocation.text = location
