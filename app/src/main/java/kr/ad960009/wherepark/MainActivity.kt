@@ -87,8 +87,7 @@ class MainActivity : AppCompatActivity() {
     private fun checkPermissionsAndScan() {
         val requiredPermissions = arrayOf(
             Manifest.permission.BLUETOOTH_SCAN,
-            Manifest.permission.BLUETOOTH_CONNECT,
-            Manifest.permission.ACCESS_FINE_LOCATION
+            Manifest.permission.BLUETOOTH_CONNECT
         )
 
         val isAlreadyGranted = requiredPermissions.all {
@@ -105,8 +104,7 @@ class MainActivity : AppCompatActivity() {
     private fun checkPermissionsAndSelectCar() {
         val requiredPermissions = arrayOf(
             Manifest.permission.BLUETOOTH_SCAN,
-            Manifest.permission.BLUETOOTH_CONNECT,
-            Manifest.permission.ACCESS_FINE_LOCATION
+            Manifest.permission.BLUETOOTH_CONNECT
         )
 
         val isAlreadyGranted = requiredPermissions.all {
