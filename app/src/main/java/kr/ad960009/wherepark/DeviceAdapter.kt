@@ -43,7 +43,7 @@ class DeviceAdapter(private val onClick: (BeaconDevice) -> Unit) :
         fun bind(device: BeaconDevice) {
             binding.tvDeviceName.text = device.name
             binding.tvDeviceAddress.text = device.address
-            binding.tvRssi.text = "${device.rssi} dBm"
+            binding.tvRssi.text = binding.root.context.getString(R.string.rssi_format, device.rssi)
         }
     }
 }

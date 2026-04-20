@@ -17,6 +17,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 
 class ParkingService : Service() {
 
@@ -73,6 +74,13 @@ class ParkingService : Service() {
                         startParkingScan()
                         updateWidgetWithStatus(Constants.MSG_SCANNING)
                     }
+                    // Android 16+: 본드 정보 유실 또는 암호화 변경 대응
+                    "android.bluetooth.device.action.KEY_MISSING",
+                    "android.bluetooth.device.action.ENCRYPTION_CHANGE" -> {
+                        // 보안 이슈로 연결이 끊기거나 페어링이 풀린 경우에도 스캔 시도
+                        startParkingScan()
+                        updateWidgetWithStatus(Constants.MSG_SCANNING)
+                    }
                 }
             }
         }
@@ -101,10 +109,13 @@ class ParkingService : Service() {
 
         // 리시버 등록
         val filter = IntentFilter().apply {
-            addAction(BluetoothDevice.ACTION_ACL_CONNECTED)    // 연결됨 추가
-            addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED) // 연결 해제됨
+            addAction(BluetoothDevice.ACTION_ACL_CONNECTED)
+            addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED)
+            // Android 16+ 신규 인텐트 추가
+            addAction("android.bluetooth.device.action.KEY_MISSING")
+            addAction("android.bluetooth.device.action.ENCRYPTION_CHANGE")
         }
-        registerReceiver(bluetoothReceiver, filter)
+        ContextCompat.registerReceiver(this, bluetoothReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

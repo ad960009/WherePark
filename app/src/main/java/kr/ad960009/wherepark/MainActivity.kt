@@ -6,16 +6,20 @@ import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
-import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.widget.EditText
 import android.widget.Toast
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.content.edit
+import androidx.core.graphics.toColorInt
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import kr.ad960009.wherepark.databinding.ActivityMainBinding
 
@@ -44,13 +48,20 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { v, insets ->
+            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
+            insets
+        }
+
         // 블루투스 어댑터 초기화
-        val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
-        bluetoothAdapter = bluetoothManager.adapter
+        val bluetoothManager = getSystemService(BluetoothManager::class.java)
+        bluetoothAdapter = bluetoothManager?.adapter
 
         // 뷰 셋업 및 저장된 데이터 불러오기
         setupRecyclerViews()
@@ -157,7 +168,7 @@ class MainActivity : AppCompatActivity() {
             try {
                 // 안드로이드 12 이상에서 권한이 없으면 여기서 SecurityException이 발생합니다.
                 deviceName = result.device.name ?: "Unknown Device"
-            } catch (e: SecurityException) {
+            } catch (_: SecurityException) {
                 // 예외 발생 시 토스트를 띄우고 기본값을 유지합니다.
                 // runOnUiThread를 써야 하는 이유는 스캔 콜백이 백그라운드 스레드에서 돌기 때문입니다.
                 runOnUiThread {
@@ -225,7 +236,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun saveDeviceData(address: String, alias: String) {
         val prefs = getSharedPreferences(Constants.PREFS_NAME, MODE_PRIVATE)
-        prefs.edit().putString(address, alias).apply()
+        prefs.edit { putString(address, alias) }
     }
 
     // 신규 등록 다이얼로그
@@ -271,7 +282,7 @@ class MainActivity : AppCompatActivity() {
             .setMessage("[${device.name}]을(를) 삭제하시겠습니까?")
             .setPositiveButton("삭제") { _, _ ->
                 val prefs = getSharedPreferences(Constants.PREFS_NAME, MODE_PRIVATE)
-                prefs.edit().remove(device.address).apply()
+                prefs.edit { remove(device.address) }
                 loadRegisteredDevices()
                 Toast.makeText(this, "삭제되었습니다.", Toast.LENGTH_SHORT).show()
             }
@@ -293,22 +304,7 @@ class MainActivity : AppCompatActivity() {
 
         if (timeMillis != 0L) {
             val sdf = java.text.SimpleDateFormat("MM/dd HH:mm", java.util.Locale.getDefault())
-            binding.tvLastParkingTime.text = "확인 시간: ${sdf.format(java.util.Date(timeMillis))}"
-        }
-    }
-
-    private fun displayLastParkingLocation() {
-        val prefs = getSharedPreferences(Constants.PREFS_NAME, MODE_PRIVATE)
-        val lastLoc = prefs.getString(Constants.KEY_LAST_PARKING_LOCATION, "정보 없음")
-        val lastTime = prefs.getLong(Constants.KEY_LAST_PARKING_TIME, 0)
-
-        if (lastTime != 0L) {
-            //val sdf = java.text.SimpleDateFormat("MM/dd HH:mm", java.util.Locale.getDefault())
-            //val timeStr = sdf.format(java.util.Date(lastTime))
-
-            // 상단에 위치 표시용 텍스트뷰가 있다면 거기에 뿌려줍니다.
-            // binding.tvLastStatus.text = "최종 주차 위치: $lastLoc ($timeStr)"
-            Toast.makeText(this, "마지막 확인 위치: $lastLoc", Toast.LENGTH_LONG).show()
+            binding.tvLastParkingTime.text = getString(R.string.last_parking_time_format, sdf.format(java.util.Date(timeMillis)))
         }
     }
 
@@ -342,10 +338,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun saveMyCarDevice(name: String, address: String) {
         val prefs = getSharedPreferences(Constants.PREFS_NAME, MODE_PRIVATE)
-        prefs.edit().apply {
+        prefs.edit {
             putString(Constants.KEY_MY_CAR_NAME, name)
             putString(Constants.KEY_MY_CAR_ADDRESS, address)
-            apply()
         }
         updateMyCarUI(name)
         Toast.makeText(this, "내 차[$name]가 등록되었습니다.", Toast.LENGTH_SHORT).show()
@@ -373,7 +368,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateMyCarUI(carName: String) {
         // 상단 UI 업데이트 (텍스트와 색상 변경)
-        binding.tvMyCarStatus.text = "현재 등록된 차량: $carName"
-        binding.tvMyCarStatus.setTextColor(android.graphics.Color.parseColor("#00FFFF")) // Cyan 색상으로 눈에 띄게
+        binding.tvMyCarStatus.text = getString(R.string.my_car_status_format, carName)
+        binding.tvMyCarStatus.setTextColor("#00FFFF".toColorInt()) // Cyan 색상으로 눈에 띄게
     }
 }

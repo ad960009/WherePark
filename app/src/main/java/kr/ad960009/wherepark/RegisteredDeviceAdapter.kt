@@ -53,10 +53,10 @@ class RegisteredDeviceAdapter(
 
             // 💡 RSSI 값에 따라 UI 변경 (RSSI는 보통 0 미만의 음수입니다)
             if (device.rssi < 0) {
-                binding.tvRssi.text = "${device.rssi} dBm"
+                binding.tvRssi.text = binding.root.context.getString(R.string.rssi_format, device.rssi)
                 binding.tvRssi.setTextColor(Color.GREEN) // 근처에 있으면 초록색으로 표시
             } else {
-                binding.tvRssi.text = "기록됨 (신호 없음)"
+                binding.tvRssi.text = binding.root.context.getString(R.string.rssi_recorded)
                 binding.tvRssi.setTextColor(Color.GRAY)  // 신호가 없으면 회색으로 표시
             }
         }
