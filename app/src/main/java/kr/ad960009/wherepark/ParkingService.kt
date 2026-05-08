@@ -13,11 +13,14 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.ServiceInfo
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat.startForeground
 import androidx.core.content.ContextCompat
+import androidx.core.content.edit
 
 class ParkingService : Service() {
 
@@ -38,7 +41,7 @@ class ParkingService : Service() {
         if (finalLoc == Constants.MSG_SCANNING) {
             finalLoc = Constants.MSG_NOT_FOUND
             // 실제 저장소도 업데이트해줘야 다음 앱 실행 시 "탐색 중"이 뜨지 않습니다.
-            prefs.edit().putString(Constants.KEY_LAST_PARKING_LOCATION, Constants.MSG_NOT_FOUND).apply()
+            prefs.edit { putString(Constants.KEY_LAST_PARKING_LOCATION, Constants.MSG_NOT_FOUND) }
         }
 
         // 스캔이 종료될 때 최종 위치를 확정 알림으로 띄움
@@ -104,7 +107,7 @@ class ParkingService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+        val bluetoothManager = getSystemService(BLUETOOTH_SERVICE) as BluetoothManager
         bluetoothAdapter = bluetoothManager.adapter
 
         // 리시버 등록
@@ -129,7 +132,7 @@ class ParkingService : Service() {
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
 
-        startForeground(Constants.NOTIFICATION_ID, notification)
+        startForeground(this, Constants.NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
         return START_STICKY
     }
 
@@ -219,7 +222,7 @@ class ParkingService : Service() {
         val prefs = getSharedPreferences(Constants.PREFS_NAME, MODE_PRIVATE)
         // 위젯에서 읽어갈 수 있도록 임시 저장하거나 Intent에 담아 보냅니다.
         // 여기서는 가장 확실하게 Prefs에 저장하고 위젯을 갱신시키겠습니다.
-        prefs.edit().putString(Constants.KEY_LAST_PARKING_LOCATION, status).apply()
+        prefs.edit { putString(Constants.KEY_LAST_PARKING_LOCATION, status) }
 
         val intent = Intent(this, ParkingWidgetProvider::class.java)
         intent.action = AppWidgetManager.ACTION_APPWIDGET_UPDATE
