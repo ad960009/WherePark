@@ -78,8 +78,8 @@ class ParkingService : Service() {
                         updateWidgetWithStatus(Constants.MSG_SCANNING)
                     }
                     // Android 16+: 본드 정보 유실 또는 암호화 변경 대응
-                    "android.bluetooth.device.action.KEY_MISSING",
-                    "android.bluetooth.device.action.ENCRYPTION_CHANGE" -> {
+                    BluetoothDevice.ACTION_KEY_MISSING,
+                    BluetoothDevice.ACTION_ENCRYPTION_CHANGE -> {
                         // 보안 이슈로 연결이 끊기거나 페어링이 풀린 경우에도 스캔 시도
                         startParkingScan()
                         updateWidgetWithStatus(Constants.MSG_SCANNING)
@@ -115,10 +115,12 @@ class ParkingService : Service() {
             addAction(BluetoothDevice.ACTION_ACL_CONNECTED)
             addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED)
             // Android 16+ 신규 인텐트 추가
-            addAction("android.bluetooth.device.action.KEY_MISSING")
-            addAction("android.bluetooth.device.action.ENCRYPTION_CHANGE")
+            addAction(BluetoothDevice.ACTION_KEY_MISSING)
+            addAction(BluetoothDevice.ACTION_ENCRYPTION_CHANGE)
         }
-        ContextCompat.registerReceiver(this, bluetoothReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+        // Bluetooth ACL 브로드캐스트는 시스템 프로세스가 아닌 Bluetooth 앱 프로세스에서 보내므로
+        // Android 14+에서는 RECEIVER_EXPORTED로 등록해야 정상적으로 수신 가능합니다.
+        ContextCompat.registerReceiver(this, bluetoothReceiver, filter, ContextCompat.RECEIVER_EXPORTED)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

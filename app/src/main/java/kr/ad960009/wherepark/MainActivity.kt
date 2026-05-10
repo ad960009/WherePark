@@ -85,10 +85,14 @@ class MainActivity : AppCompatActivity() {
     // =========================================================================
 
     private fun checkPermissionsAndScan() {
-        val requiredPermissions = arrayOf(
+        val requiredPermissions = mutableListOf(
             Manifest.permission.BLUETOOTH_SCAN,
             Manifest.permission.BLUETOOTH_CONNECT
-        )
+        ).apply {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                add(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }.toTypedArray()
 
         val isAlreadyGranted = requiredPermissions.all {
             ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
@@ -102,10 +106,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun checkPermissionsAndSelectCar() {
-        val requiredPermissions = arrayOf(
+        val requiredPermissions = mutableListOf(
             Manifest.permission.BLUETOOTH_SCAN,
             Manifest.permission.BLUETOOTH_CONNECT
-        )
+        ).apply {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                add(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }.toTypedArray()
 
         val isAlreadyGranted = requiredPermissions.all {
             ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
