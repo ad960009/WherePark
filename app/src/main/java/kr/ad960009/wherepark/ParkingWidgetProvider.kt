@@ -22,7 +22,6 @@ class ParkingWidgetProvider : AppWidgetProvider() {
             val views = RemoteViews(context.packageName, R.layout.widget_parking)
             views.setTextViewText(R.id.widgetLocation, location)
 
-            // 클릭 시 브로드캐스트 전송
             val intent = Intent(context, ParkingWidgetProvider::class.java).apply {
                 action = ACTION_WIDGET_CLICK
             }
@@ -44,7 +43,6 @@ class ParkingWidgetProvider : AppWidgetProvider() {
             val locationName = prefs.getString(Constants.KEY_LAST_PARKING_LOCATION, "")
 
             if (locationName == Constants.MSG_OUTDOOR && lat != 0f && lng != 0f) {
-                // 야외 주차인 경우 지도 앱 호출
                 val uri = Uri.parse("geo:$lat,$lng?q=$lat,$lng(내 차 위치)")
                 val mapIntent = Intent(Intent.ACTION_VIEW, uri).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -52,11 +50,9 @@ class ParkingWidgetProvider : AppWidgetProvider() {
                 try {
                     context.startActivity(mapIntent)
                 } catch (e: Exception) {
-                    // 지도 앱이 없는 경우 등 예외 처리 (필요시 MainActivity 실행)
                     launchMainActivity(context)
                 }
             } else {
-                // 실내 주차이거나 정보가 없는 경우 앱 실행
                 launchMainActivity(context)
             }
         }
