@@ -86,8 +86,6 @@ class MainActivity : AppCompatActivity() {
         binding.btnOpenMap.setOnClickListener {
             openOutdoorMap()
         }
-
-        startBackgroundService()
     }
 
     private fun checkPermissionsAndScan() {
@@ -320,7 +318,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateParkingInfoUI() {
         val prefs = getSharedPreferences(Constants.PREFS_NAME, MODE_PRIVATE)
-        val location = prefs.getString(Constants.KEY_LAST_PARKING_LOCATION, Constants.MSG_READY)
+        val location = prefs.getString(Constants.KEY_LAST_PARKING_LOCATION, Constants.MSG_NOT_FOUND)
         val timeMillis = prefs.getLong(Constants.KEY_LAST_PARKING_TIME, 0L)
         val lat = prefs.getFloat(Constants.KEY_LAST_LATITUDE, 0f)
         val lng = prefs.getFloat(Constants.KEY_LAST_LONGITUDE, 0f)
@@ -368,7 +366,6 @@ class MainActivity : AppCompatActivity() {
         }
         updateMyCarUI(name)
         Toast.makeText(this, "내 차[$name]가 등록되었습니다.", Toast.LENGTH_SHORT).show()
-        startBackgroundService()
     }
 
     private fun startBackgroundService() {

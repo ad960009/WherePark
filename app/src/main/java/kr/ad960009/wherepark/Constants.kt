@@ -23,6 +23,5 @@ object Constants {
     const val MSG_SCANNING = "탐색 중 🎯"
     const val MSG_NOT_FOUND = "알 수 없음"
     const val MSG_DRIVING = "주행 중 🚗"
-    const val MSG_READY = "주차 감지중"
     const val MSG_OUTDOOR = "야외"
 }

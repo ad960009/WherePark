@@ -99,22 +99,33 @@ class ParkingService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action
-        
-        val initialNotification = createNotification("서비스 활성화", "차량 연결 상태를 확인 중입니다.")
-        startForeground(Constants.NOTIFICATION_ID, initialNotification, 
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+
+        // 액션이 없는 부적절한 시작인 경우 즉시 종료
+        if (action == null) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
 
         when (action) {
             BluetoothDevice.ACTION_ACL_CONNECTED -> {
+                // 주행 시작 시 알림 생성 및 포그라운드 시작
+                val notification = createNotification("어디파킹", "차량에 연결되었습니다. 주행 중...")
+                startForeground(Constants.NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
+                
                 stopBleScan()
                 stopLocationUpdates()
                 handler.removeCallbacks(stopServiceRunnable)
-                updateNotification("차량 연결됨: 주행 중...", finalPersistent = true)
                 updateWidgetWithStatus(Constants.MSG_DRIVING)
             }
             BluetoothDevice.ACTION_ACL_DISCONNECTED -> {
+                // 연결 해제 시 포그라운드 유형에 위치 정보 추가
+                val notification = createNotification("어디파킹", "차량 연결 해제: 주차 위치 탐색 중...")
+                startForeground(Constants.NOTIFICATION_ID, notification, 
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+                
                 startParkingScan()
             }
+            else -> stopSelf()
         }
 
         return START_NOT_STICKY
