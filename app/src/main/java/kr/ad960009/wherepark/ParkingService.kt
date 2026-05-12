@@ -16,34 +16,64 @@ import android.os.IBinder
 import android.os.Looper
 import androidx.core.app.NotificationCompat
 import androidx.core.content.edit
+import com.google.android.gms.location.*
 
 class ParkingService : Service() {
 
     private var bluetoothAdapter: BluetoothAdapter? = null
+    private lateinit var fusedLocationClient: FusedLocationProviderClient
     private val handler = Handler(Looper.getMainLooper())
     private var isScanning = false
 
     private var bestRssi = -100
     private var bestLocation: String? = null
 
-    // 5분 후 스캔 자동 종료 및 서비스 종료를 위한 타이머
+    private var bestAccuracy = Float.MAX_VALUE
+    private var bestLatitude = 0.0
+    private var bestLongitude = 0.0
+
     private val stopServiceRunnable = Runnable {
         stopBleScan()
+        stopLocationUpdates()
 
         val prefs = getSharedPreferences(Constants.PREFS_NAME, MODE_PRIVATE)
         var finalLoc = prefs.getString(Constants.KEY_LAST_PARKING_LOCATION, Constants.MSG_NOT_FOUND)
 
         if (finalLoc == Constants.MSG_SCANNING) {
-            finalLoc = Constants.MSG_NOT_FOUND
-            prefs.edit { putString(Constants.KEY_LAST_PARKING_LOCATION, Constants.MSG_NOT_FOUND) }
+            if (bestAccuracy != Float.MAX_VALUE) {
+                finalLoc = Constants.MSG_OUTDOOR
+                prefs.edit {
+                    putString(Constants.KEY_LAST_PARKING_LOCATION, Constants.MSG_OUTDOOR)
+                    putFloat(Constants.KEY_LAST_LATITUDE, bestLatitude.toFloat())
+                    putFloat(Constants.KEY_LAST_LONGITUDE, bestLongitude.toFloat())
+                    putFloat(Constants.KEY_LAST_ACCURACY, bestAccuracy)
+                    putLong(Constants.KEY_LAST_PARKING_TIME, System.currentTimeMillis())
+                }
+            } else {
+                finalLoc = Constants.MSG_NOT_FOUND
+                prefs.edit { putString(Constants.KEY_LAST_PARKING_LOCATION, Constants.MSG_NOT_FOUND) }
+            }
         }
 
-        // 최종 알림을 띄우고 서비스 종료
         updateNotification("주차 기록 완료: $finalLoc", finalPersistent = false)
         updateWidgetWithStatus(finalLoc ?: Constants.MSG_NOT_FOUND)
-
-        // 모든 작업 완료 후 서비스 종료 (상태바 알림 사라짐)
         stopSelf()
+    }
+
+    private val locationCallback = object : LocationCallback() {
+        override fun onLocationResult(result: LocationResult) {
+            for (location in result.locations) {
+                if (location.accuracy <= Constants.MAX_LOCATION_ACCURACY_METERS && 
+                    location.accuracy < bestAccuracy) {
+                    
+                    bestAccuracy = location.accuracy
+                    bestLatitude = location.latitude
+                    bestLongitude = location.longitude
+                    
+                    println("최적 위치 갱신: ${location.latitude}, ${location.longitude} (오차: ${location.accuracy}m)")
+                }
+            }
+        }
     }
 
     private val scanCallback = object : ScanCallback() {
@@ -63,35 +93,31 @@ class ParkingService : Service() {
         super.onCreate()
         val bluetoothManager = getSystemService(BLUETOOTH_SERVICE) as BluetoothManager
         bluetoothAdapter = bluetoothManager.adapter
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
         createNotificationChannel()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action
         
-        // 초기 포그라운드 설정 (안드로이드 정책상 필수)
         val initialNotification = createNotification("서비스 활성화", "차량 연결 상태를 확인 중입니다.")
-        startForeground(Constants.NOTIFICATION_ID, initialNotification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
+        startForeground(Constants.NOTIFICATION_ID, initialNotification, 
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
 
         when (action) {
             BluetoothDevice.ACTION_ACL_CONNECTED -> {
-                // 주행 시작 시: 기존 스캔 중단하고 주행 중 상태 유지
                 stopBleScan()
+                stopLocationUpdates()
                 handler.removeCallbacks(stopServiceRunnable)
                 updateNotification("차량 연결됨: 주행 중...", finalPersistent = true)
                 updateWidgetWithStatus(Constants.MSG_DRIVING)
             }
             BluetoothDevice.ACTION_ACL_DISCONNECTED -> {
-                // 차량 연결 해제 시: 주차 위치 스캔 시작
                 startParkingScan()
-            }
-            else -> {
-                // 액션 없이 실행된 경우 (예: 앱에서 직접 실행)
-                // 현재 연결 상태를 확인하여 분기 처리 가능하지만, 기본적으로 대기
             }
         }
 
-        return START_NOT_STICKY // 작업 완료 후 종료되도록 설정
+        return START_NOT_STICKY
     }
 
     @SuppressLint("MissingPermission")
@@ -100,15 +126,29 @@ class ParkingService : Service() {
         isScanning = true
         bestRssi = -100
         bestLocation = null
+        bestAccuracy = Float.MAX_VALUE
 
         updateNotification("차량 연결 해제: 주차 위치 탐색 중...", finalPersistent = true)
         updateWidgetWithStatus(Constants.MSG_SCANNING)
 
         bluetoothAdapter?.bluetoothLeScanner?.startScan(scanCallback)
+        startLocationUpdates()
 
-        // 5분 후 서비스 완전 종료 예약
         handler.removeCallbacks(stopServiceRunnable)
         handler.postDelayed(stopServiceRunnable, Constants.PARKING_SCAN_DURATION_MS)
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun startLocationUpdates() {
+        val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 5000)
+            .setMinUpdateIntervalMillis(2000)
+            .build()
+        
+        fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, Looper.getMainLooper())
+    }
+
+    private fun stopLocationUpdates() {
+        fusedLocationClient.removeLocationUpdates(locationCallback)
     }
 
     @SuppressLint("MissingPermission")
@@ -150,7 +190,7 @@ class ParkingService : Service() {
             .setContentTitle("어디파킹")
             .setContentText(content)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setOngoing(finalPersistent) // false이면 사용자가 밀어서 지울 수 있음
+            .setOngoing(finalPersistent)
             .build()
 
         val manager = getSystemService(NotificationManager::class.java)
