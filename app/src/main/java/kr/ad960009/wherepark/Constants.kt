@@ -9,6 +9,9 @@ object Constants {
     const val KEY_MY_CAR_ADDRESS = "MY_CAR_ADDRESS"
     const val KEY_LAST_PARKING_LOCATION = "LAST_PARKING_LOCATION"
     const val KEY_LAST_PARKING_TIME = "LAST_PARKING_TIME"
+    const val KEY_LAST_LATITUDE = "LAST_LATITUDE"
+    const val KEY_LAST_LONGITUDE = "LAST_LONGITUDE"
+    const val KEY_LAST_ACCURACY = "LAST_ACCURACY"
 
     // 알림 관련
     const val CHANNEL_ID = "PARKING_CHANNEL"
@@ -25,4 +28,5 @@ object Constants {
     const val MSG_NOT_FOUND = "알 수 없음"
     const val MSG_DRIVING = "주행 중 🚗"
     const val MSG_READY = "주차 감지중"
+    const val MSG_OUTDOOR = "야외"
 }
