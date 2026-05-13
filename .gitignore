@@ -1,5 +1,9 @@
 *.iml
 .gradle
+.kotlin
+.navigation
+.endpoint
+.google_services
 /local.properties
 /.idea/
 .DS_Store
