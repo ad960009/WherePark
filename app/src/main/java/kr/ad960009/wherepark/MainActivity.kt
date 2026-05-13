@@ -273,8 +273,24 @@ class MainActivity : AppCompatActivity() {
                 val alias = input.text.toString()
                 if (alias.isNotEmpty()) {
                     saveDeviceData(device.address, alias)
-                    loadRegisteredDevices()
-                    Toast.makeText(this, "[$alias] 등록되었습니다!", Toast.LENGTH_SHORT).show()
+                    
+                    val prefs = getSharedPreferences(Constants.PREFS_NAME, MODE_PRIVATE)
+                    val currentStatus = prefs.getString(Constants.KEY_LAST_PARKING_LOCATION, null)
+                    
+                    // 주차 탐색 중일 때만 현재 등록한 장치를 마지막 주차 위치로 업데이트
+                    if (currentStatus == Constants.MSG_SCANNING) {
+                        prefs.edit {
+                            putString(Constants.KEY_LAST_PARKING_LOCATION, alias)
+                            putLong(Constants.KEY_LAST_PARKING_TIME, System.currentTimeMillis())
+                        }
+                        stopService(Intent(this@MainActivity, ParkingService::class.java))
+                        Toast.makeText(this, "[$alias] 주차 위치가 확정되었습니다!", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(this, "[$alias] 등록되었습니다!", Toast.LENGTH_SHORT).show()
+                    }
+                    
+                    loadRegisteredDevices() // 리스트 새로고침
+                    updateParkingInfoUI()   // 상단 카드 UI 업데이트
                 }
             }
             .setNegativeButton("취소", null)
@@ -397,7 +413,8 @@ class MainActivity : AppCompatActivity() {
         val lng = prefs.getFloat(Constants.KEY_LAST_LONGITUDE, 0f)
 
         if (lat != 0f && lng != 0f) {
-            val uri = android.net.Uri.parse("geo:$lat,$lng?q=$lat,$lng(내 차 위치)")
+            // 모든 지도 앱과 호환성이 높은 구글 맵 검색 URL 사용
+            val uri = android.net.Uri.parse("https://www.google.com/maps/search/?api=1&query=$lat,$lng")
             val mapIntent = Intent(Intent.ACTION_VIEW, uri).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }

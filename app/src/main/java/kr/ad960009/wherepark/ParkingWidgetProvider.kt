@@ -43,7 +43,7 @@ class ParkingWidgetProvider : AppWidgetProvider() {
             val locationName = prefs.getString(Constants.KEY_LAST_PARKING_LOCATION, "")
 
             if (locationName == Constants.MSG_OUTDOOR && lat != 0f && lng != 0f) {
-                val uri = Uri.parse("geo:$lat,$lng?q=$lat,$lng(내 차 위치)")
+                val uri = Uri.parse("https://www.google.com/maps/search/?api=1&query=$lat,$lng")
                 val mapIntent = Intent(Intent.ACTION_VIEW, uri).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
