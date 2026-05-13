@@ -22,6 +22,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import kr.ad960009.wherepark.databinding.ActivityMainBinding
+import androidx.core.net.toUri
 
 class MainActivity : AppCompatActivity() {
 
@@ -414,7 +415,7 @@ class MainActivity : AppCompatActivity() {
 
         if (lat != 0f && lng != 0f) {
             // 모든 지도 앱과 호환성이 높은 구글 맵 검색 URL 사용
-            val uri = android.net.Uri.parse("https://www.google.com/maps/search/?api=1&query=$lat,$lng")
+            val uri = "https://www.google.com/maps/search/?api=1&query=$lat,$lng".toUri()
             val mapIntent = Intent(Intent.ACTION_VIEW, uri).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }

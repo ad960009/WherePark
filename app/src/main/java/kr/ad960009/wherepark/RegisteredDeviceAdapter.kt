@@ -3,6 +3,7 @@ package kr.ad960009.wherepark
 import android.graphics.Color
 import android.view.LayoutInflater
 import android.view.ViewGroup
+import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import kr.ad960009.wherepark.databinding.ItemDeviceBinding
 
@@ -14,12 +15,30 @@ class RegisteredDeviceAdapter(
     private val devices = mutableListOf<BeaconDevice>()
 
     fun setItems(newDevices: List<BeaconDevice>) {
+        val diffCallback = DeviceDiffCallback(devices, newDevices)
+        val diffResult = DiffUtil.calculateDiff(diffCallback)
+
         devices.clear()
         devices.addAll(newDevices)
-        notifyDataSetChanged()
+        diffResult.dispatchUpdatesTo(this)
     }
 
-    // 💡 추가된 기능: 스캔 중에 신호가 잡히면 RSSI 업데이트
+    class DeviceDiffCallback(
+        private val oldList: List<BeaconDevice>,
+        private val newList: List<BeaconDevice>
+    ) : DiffUtil.Callback() {
+        override fun getOldListSize() = oldList.size
+        override fun getNewListSize() = newList.size
+
+        override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
+            return oldList[oldItemPosition].address == newList[newItemPosition].address
+        }
+
+        override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
+            return oldList[oldItemPosition] == newList[newItemPosition]
+        }
+    }
+
     fun updateRssi(address: String, rssi: Int) {
         val index = devices.indexOfFirst { it.address == address }
         if (index != -1) {
@@ -51,13 +70,12 @@ class RegisteredDeviceAdapter(
             binding.tvDeviceName.text = device.name
             binding.tvDeviceAddress.text = device.address
 
-            // 💡 RSSI 값에 따라 UI 변경 (RSSI는 보통 0 미만의 음수입니다)
             if (device.rssi < 0) {
                 binding.tvRssi.text = binding.root.context.getString(R.string.rssi_format, device.rssi)
-                binding.tvRssi.setTextColor(Color.GREEN) // 근처에 있으면 초록색으로 표시
+                binding.tvRssi.setTextColor(Color.GREEN)
             } else {
                 binding.tvRssi.text = binding.root.context.getString(R.string.rssi_recorded)
-                binding.tvRssi.setTextColor(Color.GRAY)  // 신호가 없으면 회색으로 표시
+                binding.tvRssi.setTextColor(Color.GRAY)
             }
         }
     }

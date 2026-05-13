@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.RemoteViews
+import androidx.core.net.toUri
 
 class ParkingWidgetProvider : AppWidgetProvider() {
 
@@ -43,7 +44,7 @@ class ParkingWidgetProvider : AppWidgetProvider() {
             val locationName = prefs.getString(Constants.KEY_LAST_PARKING_LOCATION, "")
 
             if (locationName == Constants.MSG_OUTDOOR && lat != 0f && lng != 0f) {
-                val uri = Uri.parse("https://www.google.com/maps/search/?api=1&query=$lat,$lng")
+                val uri = "https://www.google.com/maps/search/?api=1&query=$lat,$lng".toUri()
                 val mapIntent = Intent(Intent.ACTION_VIEW, uri).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
