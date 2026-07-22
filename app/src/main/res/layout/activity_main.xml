@@ -63,14 +63,36 @@
                 android:textStyle="bold"
                 android:layout_marginTop="6dp" />
 
-            <TextView
-                android:id="@+id/tvLastParkingTime"
-                android:layout_width="wrap_content"
+            <!-- 시간 표시와 수동 선택 버튼을 나란히 배치하기 위한 레이아웃 -->
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="스캔 데이터가 없습니다."
-                android:textColor="#888888"
-                android:textSize="12sp"
-                android:layout_marginTop="4dp" />
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="4dp">
+
+                <TextView
+                    android:id="@+id/tvLastParkingTime"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="스캔 데이터가 없습니다."
+                    android:textColor="#888888"
+                    android:textSize="12sp" />
+
+                <!-- 수동 선택 버튼 추가 -->
+                <Button
+                    android:id="@+id/btnManualSelect"
+                    android:layout_width="wrap_content"
+                    android:layout_height="32dp"
+                    android:text="수동 선택"
+                    android:textColor="#FFBB00"
+                    android:textSize="12sp"
+                    android:paddingHorizontal="8dp"
+                    android:minHeight="0dp"
+                    android:minWidth="0dp"
+                    style="@style/Widget.MaterialComponents.Button.TextButton" />
+            </LinearLayout>
         </LinearLayout>
     </androidx.cardview.widget.CardView>
 

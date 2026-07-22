@@ -2,10 +2,12 @@ package kr.ad960009.wherepark
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.appwidget.AppWidgetManager
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
+import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
@@ -86,6 +88,11 @@ class MainActivity : AppCompatActivity() {
 
         binding.btnOpenMap.setOnClickListener {
             openOutdoorMap()
+        }
+
+        // 수동 선택 버튼 리스너 추가
+        binding.btnManualSelect.setOnClickListener {
+            showManualParkingLocationDialog()
         }
     }
 
@@ -274,11 +281,10 @@ class MainActivity : AppCompatActivity() {
                 val alias = input.text.toString()
                 if (alias.isNotEmpty()) {
                     saveDeviceData(device.address, alias)
-                    
+
                     val prefs = getSharedPreferences(Constants.PREFS_NAME, MODE_PRIVATE)
                     val currentStatus = prefs.getString(Constants.KEY_LAST_PARKING_LOCATION, null)
-                    
-                    // 주차 탐색 중일 때만 현재 등록한 장치를 마지막 주차 위치로 업데이트
+
                     if (currentStatus == Constants.MSG_SCANNING) {
                         prefs.edit {
                             putString(Constants.KEY_LAST_PARKING_LOCATION, alias)
@@ -289,9 +295,9 @@ class MainActivity : AppCompatActivity() {
                     } else {
                         Toast.makeText(this, "[$alias] 등록되었습니다!", Toast.LENGTH_SHORT).show()
                     }
-                    
-                    loadRegisteredDevices() // 리스트 새로고침
-                    updateParkingInfoUI()   // 상단 카드 UI 업데이트
+
+                    loadRegisteredDevices()
+                    updateParkingInfoUI()
                 }
             }
             .setNegativeButton("취소", null)
@@ -414,7 +420,6 @@ class MainActivity : AppCompatActivity() {
         val lng = prefs.getFloat(Constants.KEY_LAST_LONGITUDE, 0f)
 
         if (lat != 0f && lng != 0f) {
-            // 모든 지도 앱과 호환성이 높은 구글 맵 검색 URL 사용
             val uri = "https://www.google.com/maps/search/?api=1&query=$lat,$lng".toUri()
             val mapIntent = Intent(Intent.ACTION_VIEW, uri).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -425,5 +430,77 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, "설치된 지도 앱이 없습니다.", Toast.LENGTH_SHORT).show()
             }
         }
+    }
+
+    /**
+     * 등록된 주차 위치(장치) 목록을 불러와 수동으로 선택할 수 있는 다이얼로그를 표시합니다.
+     */
+    private fun showManualParkingLocationDialog() {
+        val prefs = getSharedPreferences(Constants.PREFS_NAME, MODE_PRIVATE)
+        val allEntries = prefs.all
+        val savedAliases = mutableListOf<String>()
+
+        val excludeKeys = listOf(
+            Constants.KEY_MY_CAR_NAME,
+            Constants.KEY_MY_CAR_ADDRESS,
+            Constants.KEY_LAST_PARKING_LOCATION,
+            Constants.KEY_LAST_PARKING_TIME,
+            Constants.KEY_LAST_LATITUDE,
+            Constants.KEY_LAST_LONGITUDE,
+            Constants.KEY_LAST_ACCURACY
+        )
+
+        // 시스템 키워드를 제외하고 등록된 장치의 이름들만 필터링합니다.
+        for ((key, value) in allEntries) {
+            if (key !in excludeKeys) {
+                savedAliases.add(value.toString())
+            }
+        }
+
+        if (savedAliases.isEmpty()) {
+            AlertDialog.Builder(this)
+                .setTitle("수동 선택 불가")
+                .setMessage("미리 등록된 주차 위치가 없습니다. 아래 목록에서 주변 장치를 먼저 등록해 주세요.")
+                .setPositiveButton("확인", null)
+                .show()
+            return
+        }
+
+        // 중복 이름을 제거하고 배열로 변환합니다.
+        val items = savedAliases.distinct().toTypedArray()
+
+        AlertDialog.Builder(this)
+            .setTitle("주차 위치 수동 선택")
+            .setItems(items) { _, which ->
+                val selectedAlias = items[which]
+
+                // 사용자가 선택한 위치를 SharedPreferences에 덮어씁니다.
+                prefs.edit {
+                    putString(Constants.KEY_LAST_PARKING_LOCATION, selectedAlias)
+                    putLong(Constants.KEY_LAST_PARKING_TIME, System.currentTimeMillis())
+                }
+
+                // UI와 위젯을 즉시 업데이트합니다.
+                updateParkingInfoUI()
+                updateWidget()
+
+                Toast.makeText(this, "주차 위치가 [$selectedAlias]로 수동 변경되었습니다.", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("취소", null)
+            .show()
+    }
+
+    /**
+     * 메인 화면에서 수동으로 위치를 변경했을 때 홈 화면 위젯도 함께 동기화하기 위한 헬퍼 함수입니다.
+     */
+    private fun updateWidget() {
+        val intent = Intent(this, ParkingWidgetProvider::class.java).apply {
+            action = AppWidgetManager.ACTION_APPWIDGET_UPDATE
+            val ids = AppWidgetManager.getInstance(application).getAppWidgetIds(
+                ComponentName(application, ParkingWidgetProvider::class.java)
+            )
+            putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, ids)
+        }
+        sendBroadcast(intent)
     }
 }
