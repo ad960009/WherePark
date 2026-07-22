@@ -8,12 +8,15 @@ import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
+import android.bluetooth.le.ScanSettings
 import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import androidx.core.content.edit
 import com.google.android.gms.location.*
@@ -31,6 +34,7 @@ class ParkingService : Service() {
     private var bestAccuracy = Float.MAX_VALUE
     private var bestLatitude = 0.0
     private var bestLongitude = 0.0
+    private var wakeLock: PowerManager.WakeLock? = null
 
     private val stopServiceRunnable = Runnable {
         stopBleScan()
@@ -57,19 +61,22 @@ class ParkingService : Service() {
 
         updateNotification("주차 기록 완료: $finalLoc", finalPersistent = false)
         updateWidgetWithStatus(finalLoc ?: Constants.MSG_NOT_FOUND)
+
+        // 탐색이 완료되면 반드시 WakeLock을 해제하여 배터리 소모를 막습니다.
+        releaseWakeLock()
         stopSelf()
     }
 
     private val locationCallback = object : LocationCallback() {
         override fun onLocationResult(result: LocationResult) {
             for (location in result.locations) {
-                if (location.accuracy <= Constants.MAX_LOCATION_ACCURACY_METERS && 
+                if (location.accuracy <= Constants.MAX_LOCATION_ACCURACY_METERS &&
                     location.accuracy < bestAccuracy) {
-                    
+
                     bestAccuracy = location.accuracy
                     bestLatitude = location.latitude
                     bestLongitude = location.longitude
-                    
+
                     println("최적 위치 갱신: ${location.latitude}, ${location.longitude} (오차: ${location.accuracy}m)")
                 }
             }
@@ -94,13 +101,20 @@ class ParkingService : Service() {
         val bluetoothManager = getSystemService(BLUETOOTH_SERVICE) as BluetoothManager
         bluetoothAdapter = bluetoothManager.adapter
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+
+        // WakeLock 초기화
+        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        wakeLock = powerManager.newWakeLock(
+            PowerManager.PARTIAL_WAKE_LOCK,
+            "WherePark:ParkingScanWakeLock"
+        )
+
         createNotificationChannel()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action
 
-        // 액션이 없는 부적절한 시작인 경우 즉시 종료
         if (action == null) {
             stopSelf()
             return START_NOT_STICKY
@@ -108,21 +122,21 @@ class ParkingService : Service() {
 
         when (action) {
             BluetoothDevice.ACTION_ACL_CONNECTED -> {
-                // 주행 시작 시 알림 생성 및 포그라운드 시작
                 val notification = createNotification("어디파킹", "차량에 연결되었습니다. 주행 중...")
                 startForeground(Constants.NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
-                
+
                 stopBleScan()
                 stopLocationUpdates()
                 handler.removeCallbacks(stopServiceRunnable)
+                releaseWakeLock()
+
                 updateWidgetWithStatus(Constants.MSG_DRIVING)
             }
             BluetoothDevice.ACTION_ACL_DISCONNECTED -> {
-                // 연결 해제 시 포그라운드 유형에 위치 정보 추가
                 val notification = createNotification("어디파킹", "차량 연결 해제: 주차 위치 탐색 중...")
-                startForeground(Constants.NOTIFICATION_ID, notification, 
+                startForeground(Constants.NOTIFICATION_ID, notification,
                     ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
-                
+
                 startParkingScan()
             }
             else -> stopSelf()
@@ -139,10 +153,18 @@ class ParkingService : Service() {
         bestLocation = null
         bestAccuracy = Float.MAX_VALUE
 
+        // 화면이 꺼져도 CPU가 멈추지 않도록 지정된 시간만큼 WakeLock을 유지합니다.
+        wakeLock?.acquire(Constants.PARKING_SCAN_DURATION_MS)
+
         updateNotification("차량 연결 해제: 주차 위치 탐색 중...", finalPersistent = true)
         updateWidgetWithStatus(Constants.MSG_SCANNING)
 
-        bluetoothAdapter?.bluetoothLeScanner?.startScan(scanCallback)
+        // 화면이 꺼져있을 때도 적극적으로 스캔하도록 ScanSettings 추가
+        val scanSettings = ScanSettings.Builder()
+            .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+            .build()
+
+        bluetoothAdapter?.bluetoothLeScanner?.startScan(null, scanSettings, scanCallback)
         startLocationUpdates()
 
         handler.removeCallbacks(stopServiceRunnable)
@@ -154,7 +176,7 @@ class ParkingService : Service() {
         val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 5000)
             .setMinUpdateIntervalMillis(2000)
             .build()
-        
+
         fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, Looper.getMainLooper())
     }
 
@@ -167,6 +189,12 @@ class ParkingService : Service() {
         if (isScanning) {
             bluetoothAdapter?.bluetoothLeScanner?.stopScan(scanCallback)
             isScanning = false
+        }
+    }
+
+    private fun releaseWakeLock() {
+        if (wakeLock?.isHeld == true) {
+            wakeLock?.release()
         }
     }
 
@@ -237,6 +265,7 @@ class ParkingService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         stopBleScan()
+        releaseWakeLock()
         handler.removeCallbacks(stopServiceRunnable)
     }
 
